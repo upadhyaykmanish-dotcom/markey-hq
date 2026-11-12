@@ -1,17 +1,11 @@
 import streamlit as st
 import yfinance as yf
-import pandas as pd
 from datetime import datetime
 import pytz
-import json
-import os
-from google import genai
-
-GEMINI_KEY = "AQ.Ab8RN6KOv3QD2n7-ptoxMq5Dgbo753X3uc9eeVO1qzLJkg2Brg"
 
 st.set_page_config(
-    page_title="AlphaPulse HQ Pro AI",
-    page_icon="⚡",
+    page_title="AlphaPulse Voice Agent",
+    page_icon="🎙️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -23,175 +17,185 @@ current_hour = now_ist.hour
 current_minute = now_ist.minute
 time_str = now_ist.strftime("%d-%b-%Y | %I:%M:%S %p")
 
-# 2. सेल्फ-लर्निंग मेमोरी सिस्टम
-MEMORY_FILE = "user_memory.json"
-def load_memory():
-    if os.path.exists(MEMORY_FILE):
+is_weekday = now_ist.weekday() < 5
+is_live = is_weekday and ((current_hour == 9 and current_minute >= 15) or (10 <= current_hour < 15) or (current_hour == 15 and current_minute <= 30))
+
+# 2. लाइव मार्केट डेटा फेच
+@st.cache_data(ttl=60)
+def get_data():
+    tickers = {
+        "NIFTY": "^NSEI",
+        "CRUDE": "CL=F",
+        "GOLD": "GC=F",
+        "VIX": "^INDIAVIX",
+        "NASDAQ": "^IXIC"
+    }
+    res = {}
+    for k, sym in tickers.items():
         try:
-            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+            h = yf.Ticker(sym).history(period="2d")
+            if len(h) >= 2:
+                c = h['Close'].iloc[-1]
+                p = h['Close'].iloc[-2]
+                res[k] = {"price": round(c, 2), "pct": round(((c - p)/p)*100, 2)}
+            elif len(h) == 1:
+                res[k] = {"price": round(h['Close'].iloc[-1], 2), "pct": 0.0}
+            else:
+                res[k] = {"price": 0.0, "pct": 0.0}
         except:
-            pass
-    return {"rules": ["कैलकुलेटेड रिस्क मैनेजमेंट 1:2 रखें", "रात में नो ऑप्शन ट्रेड"], "notes": []}
+            res[k] = {"price": 0.0, "pct": 0.0}
+    return res
 
-def save_memory(mem):
-    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(mem, f, ensure_ascii=False, indent=2)
+mkt = get_data()
 
-user_memory = load_memory()
-
-# डार्क थीम UI
+# डार्क प्रीमियम UI
 st.markdown("""
 <style>
-    .stApp { background-color: #0b0e14; color: #ffffff; }
-    .card { background-color: #161b22; border-radius: 8px; padding: 14px; border: 1px solid #30363d; margin-bottom: 8px; }
-    .val-green { color: #00c087; font-weight: 700; }
-    .val-red { color: #ff4d4f; font-weight: 700; }
-    .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
-    .badge-closed { background: #3d1f24; color: #ff7b72; border: 1px solid #ff4d4f; }
-    .badge-live { background: #133321; color: #56d364; border: 1px solid #238636; }
+    .stApp { background-color: #080b10; color: #ffffff; }
+    .voice-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 30px;
+        background: #111622;
+        border-radius: 16px;
+        border: 1px solid #232c3d;
+        margin-top: 20px;
+    }
+    .pulse-orb {
+        width: 120px;
+        height: 120px;
+        background: radial-gradient(circle, #00c087 10%, #080b10 80%);
+        border-radius: 50%;
+        box-shadow: 0 0 35px rgba(0, 192, 135, 0.4);
+        animation: orb-pulse 2s infinite ease-in-out;
+        margin-bottom: 20px;
+    }
+    @keyframes orb-pulse {
+        0% { transform: scale(0.92); opacity: 0.7; }
+        50% { transform: scale(1.08); opacity: 1; box-shadow: 0 0 50px rgba(0, 192, 135, 0.7); }
+        100% { transform: scale(0.92); opacity: 0.7; }
+    }
+    .status-text { font-size: 1.2rem; font-weight: 600; color: #58a6ff; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. मार्केट डेटा
-TICKERS = {
-    "NIFTY 50": "^NSEI",
-    "SENSEX": "^BSESN",
-    "INDIA VIX": "^INDIAVIX",
-    "CRUDE OIL": "CL=F",
-    "GOLD": "GC=F",
-    "BITCOIN": "BTC-USD",
-    "NASDAQ": "^IXIC"
-}
+st.title("🎙️ AlphaPulse Voice AI — हैंड्स-फ्री मार्केट असिस्टेंट")
+st.caption(f"समय (IST): {time_str} | स्थिति: {'NSE लाइव' if is_live else 'NSE बंद (कमोडिटी / यूएस लाइव)'}")
 
-@st.cache_data(ttl=60)
-def fetch_data():
-    res = {}
-    for name, sym in TICKERS.items():
-        try:
-            hist = yf.Ticker(sym).history(period="2d")
-            if len(hist) >= 2:
-                c = hist['Close'].iloc[-1]
-                p = hist['Close'].iloc[-2]
-                res[name] = {"price": c, "chg": c - p, "pct": ((c - p)/p)*100}
-            elif len(hist) == 1:
-                res[name] = {"price": hist['Close'].iloc[-1], "chg": 0.0, "pct": 0.0}
-            else:
-                res[name] = {"price": 0.0, "chg": 0.0, "pct": 0.0}
-        except:
-            res[name] = {"price": 0.0, "chg": 0.0, "pct": 0.0}
-    return res
+# टिकर समरी
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("NIFTY 50", f"{mkt['NIFTY']['price']:,}", f"{mkt['NIFTY']['pct']}%")
+c2.metric("INDIA VIX", f"{mkt['VIX']['price']}", f"{mkt['VIX']['pct']}%")
+c3.metric("CRUDE OIL ($)", f"{mkt['CRUDE']['price']}", f"{mkt['CRUDE']['pct']}%")
+c4.metric("GOLD ($)", f"{mkt['GOLD']['price']:,}", f"{mkt['GOLD']['pct']}%")
+c5.metric("NASDAQ", f"{mkt['NASDAQ']['price']:,}", f"{mkt['NASDAQ']['pct']}%")
 
-data = fetch_data()
-nifty_c = data.get("NIFTY 50", {}).get("price", 0)
-vix_c = data.get("INDIA VIX", {}).get("price", 15.0)
-crude_c = data.get("CRUDE OIL", {}).get("price", 0)
-gold_c = data.get("GOLD", {}).get("price", 0)
-nasdaq_pct = data.get("NASDAQ", {}).get("pct", 0)
+st.markdown("""
+<div class="voice-container">
+    <div class="pulse-orb"></div>
+    <div class="status-text">असिस्टेंट एक्टिव है — आप सीधे बोलें</div>
+    <p style="color: #8b949e; margin-top: 8px;">(उदा: "क्रूड ऑयल का क्या रुख है?", "कल निफ्टी कैसा रहेगा?", "गोल्ड का भाव बताओ")</p>
+</div>
+""", unsafe_allow_html=True)
 
-is_weekday = now_ist.weekday() < 5
-is_market_live = is_weekday and ((current_hour == 9 and current_minute >= 15) or (10 <= current_hour < 15) or (current_hour == 15 and current_minute <= 30))
+# 3. फुल ऑटोमैटिक टू-वे वॉइस इंजन (JavaScript Web Speech + TTS)
+market_summary_text = (
+    f"वर्तमान में निफ्टी {mkt['NIFTY']['price']} पर है। "
+    f"इंडिया विक्स {mkt['VIX']['price']} पर चल रहा है। "
+    f"कच्चा तेल {mkt['CRUDE']['price']} डॉलर और सोना {mkt['GOLD']['price']} डॉलर पर ट्रेड कर रहा है। "
+    f"अमेरिकी नैस्डैक {mkt['NASDAQ']['pct']} प्रतिशत पर है।"
+)
 
-# हेडर
-st.title("⚡ AlphaPulse HQ Pro — AI Terminal")
-status_html = '<span class="status-badge badge-live">NSE लाइव</span>' if is_market_live else '<span class="status-badge badge-closed">NSE बंद (MCX/ग्लोबल एक्टिव)</span>'
-st.markdown(f"<b>वक्त (IST):</b> {time_str} &nbsp;|&nbsp; {status_html}", unsafe_allow_html=True)
+st.components.v1.html(f"""
+<div id="agent-box" style="text-align:center; padding: 15px; color:#c9d1d9; font-family:sans-serif;">
+    <p id="user-said" style="font-size: 1.1rem; color: #58a6ff; font-weight: 500;">माइक ऑन है, बोलिए...</p>
+    <p id="ai-replied" style="font-size: 1.15rem; color: #00c087; font-weight: 600; margin-top: 10px;"></p>
+</div>
 
-# टिकर ग्रिड
-cols = st.columns(6)
-for i, name in enumerate(["NIFTY 50", "INDIA VIX", "CRUDE OIL", "GOLD", "BITCOIN", "NASDAQ"]):
-    val = data.get(name, {"price": 0, "chg": 0, "pct": 0})
-    cls = "val-green" if val['chg'] >= 0 else "val-red"
-    sign = "+" if val['chg'] >= 0 else ""
-    with cols[i]:
-        st.markdown(f"""
-        <div class="card">
-            <div style="color: #8b949e; font-size: 0.75rem;">{name}</div>
-            <div style="font-size: 1.1rem; font-weight: 700;">{val['price']:,.2f}</div>
-            <div class="{cls}" style="font-size: 0.8rem;">{sign}{val['chg']:,.2f} ({sign}{val['pct']:.2f}%)</div>
-        </div>
-        """, unsafe_allow_html=True)
+<script>
+    const synth = window.speechSynthesis;
+    let recognition = null;
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-st.write("---")
+    function speak(text) {{
+        synth.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = 'hi-IN';
+        msg.rate = 0.95;
+        
+        const voices = synth.getVoices();
+        const hiVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi'));
+        if (hiVoice) msg.voice = hiVoice;
+        
+        msg.onend = function() {{
+            startListening();
+        }};
+        synth.speak(msg);
+    }}
 
-# 4. शाम का सत्र व कल का गेमप्लान
-if not is_market_live:
-    st.subheader("🌙 शाम का सत्र: MCX कमोडिटीज़ व कल का प्री-मार्केट गेमप्लान")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"""
-        <div class="card" style="border-left: 4px solid #f0883e;">
-            <h4 style="margin-top:0; color:#f0883e;">⚡ MCX कमोडिटीज़ स्थिति</h4>
-            <p>• <b>Crude Oil:</b> ${crude_c:.2f} ({data.get('CRUDE OIL', {}).get('pct', 0):+.2f}%)</p>
-            <p>• <b>Gold:</b> ${gold_c:,.2f} ({data.get('GOLD', {}).get('pct', 0):+.2f}%)</p>
-            <p>• <b>रणनीति:</b> 70 डॉलर के ऊपर क्रूड रहने पर कल पेंट और ओएमसी स्टॉक्स पर नज़र रखें।</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""
-        <div class="card" style="border-left: 4px solid #58a6ff;">
-            <h4 style="margin-top:0; color:#58a6ff;">🎯 कल सुबह के लिए निफ्टी गेमप्लान</h4>
-            <p>• <b>क्लोजिंग लेवल्स:</b> Nifty {nifty_c:,.0f} | India VIX: {vix_c:.2f}</p>
-            <p>• <b>ग्लोबल संकेत:</b> US Nasdaq {nasdaq_pct:+.2f}% पर ट्रेड कर रहा है।</p>
-            <p>• <b>कल का नियम:</b> रात में कोई ओवरनाइट ऑप्शन कॉल नहीं। सुबह गिफ्ट निफ्टी देखकर फ्रेश सेटअप तय होगा।</p>
-        </div>
-        """, unsafe_allow_html=True)
+    function generateAnswer(query) {{
+        const q = query.toLowerCase();
+        const mktData = "{market_summary_text}";
+        
+        if (q.includes("क्रूड") || q.includes("crude") || q.includes("तेल")) {{
+            return "क्रूड ऑयल इस समय {mkt['CRUDE']['price']} डॉलर पर ट्रेड कर रहा है। यदि यह 70 डॉलर के ऊपर टिकता है तो कल पेंट और टायर कंपनियों पर दबाव रह सकता है।";
+        }} else if (q.includes("गोल्ड") || q.includes("gold") || q.includes("सोना")) {{
+            return "सोना {mkt['GOLD']['price']} डॉलर के स्तर पर चल रहा है, इसमें {mkt['GOLD']['pct']} प्रतिशत का बदलाव देखा गया है।";
+        }} else if (q.includes("निफ्टी") || q.includes("nifty") || q.includes("कल")) {{
+            return "निफ्टी {mkt['NIFTY']['price']} पर क्लोज हुआ है और विक्स {mkt['VIX']['price']} है। रात में ऑप्शंस में कोई पोजीशन न रखें, सुबह गिफ्ट निफ्टी देखकर ही फ्रेश एंट्री प्लान करें।";
+        }} else if (q.includes("विक्स") || q.includes("vix")) {{
+            return "इंडिया विक्स {mkt['VIX']['price']} पर है, जो बाज़ार में सामान्य वोलैटिलिटी का संकेत दे रहा है।";
+        }} else {{
+            return mktData + " रिस्क मैनेजमेंट हमेशा एक अनुपात दो रखें।";
+        }}
+    }}
 
-st.write("---")
+    function startListening() {{
+        if (!SpeechRec) {{
+            document.getElementById('user-said').innerText = "आपका ब्राउज़र वॉइस सपोर्ट नहीं करता। कृपया क्रोम इस्तेमाल करें।";
+            return;
+        }}
+        
+        recognition = new SpeechRec();
+        recognition.lang = 'hi-IN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
 
-# 5. लाइव AI बातचीत टर्मिनल
-st.subheader("🎙️ Gemini AI वॉइस असिस्टेंट")
+        recognition.onstart = function() {{
+            document.getElementById('user-said').innerText = "🎙️ सुन रहा हूँ... बोलिए";
+        }};
 
-user_query = st.chat_input("बोलें या लिखें (उदा: 'क्रूड का क्या हाल है?' या 'याद रखो: रिस्क 1:2 रखना है')")
-
-if user_query:
-    with st.spinner("Gemini AI विश्लेषण कर रहा है..."):
-        try:
-            client = genai.Client(api_key=GEMINI_KEY)
-            sys_context = f"""
-            आप मनीष जी के पर्सनल सीनियर मार्केट AI रणनीतिकार हैं।
-            समय: {time_str}
-            मार्केट: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
-            डेटा: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Gold=${gold_c:.2f}, Nasdaq={nasdaq_pct:.2f}%
-            मनीष जी के सेव किए गए ट्रेडिंग नियम: {user_memory['rules']}
+        recognition.onresult = function(event) {{
+            const transcript = event.results[0][0].transcript;
+            document.getElementById('user-said').innerText = '🗣️ आपने कहा: "' + transcript + '"';
             
-            निर्देश:
-            1. सीधे, सटीक और प्राकृतिक दोस्ताना हिंदी में बात करें।
-            2. अगर मनीष जी कोई नियम जोड़ने या बदलने को कहें, तो पुष्टि करें कि नियम याद रख लिया गया है।
-            3. रात के समय ऑप्शंस ट्रेडिंग से रोकें और कमोडिटी/कल की तैयारी पर फोकस रखें।
-            """
-            
-            # अपडेटेड मॉडल: gemini-3.8-flash
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=[sys_context, f"मनीष जी का सवाल: {user_query}"]
-            )
-            ai_reply = response.text
-            
-            if any(k in user_query for k in ["याद", "नियम", "सेव", "जोड़ो", "नोट"]):
-                user_memory["rules"].append(user_query)
-                save_memory(user_memory)
-            
-            st.markdown(f"*🤖 Gemini:* {ai_reply}")
-            
-            # नेचुरल वॉयस स्पीच आउटपुट
-            cleaned_audio = ai_reply.replace('"', '').replace("'", "").replace('\n', ' ')
-            st.components.v1.html(f"""
-                <script>
-                    var synth = window.speechSynthesis;
-                    var voices = synth.getVoices();
-                    var msg = new SpeechSynthesisUtterance("{cleaned_audio[:350]}");
-                    var hiVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi') || v.name.includes('India'));
-                    if (hiVoice) msg.voice = hiVoice;
-                    msg.lang = 'hi-IN';
-                    msg.rate = 1.0;
-                    synth.cancel();
-                    synth.speak(msg);
-                </script>
-            """, height=0)
-        except Exception as e:
-            st.error(f"एरर आया: {e}")
+            const reply = generateAnswer(transcript);
+            document.getElementById('ai-replied').innerText = '🤖 जवाब: ' + reply;
+            speak(reply);
+        }};
 
-with st.expander("🧠 AI द्वारा याद रखे गए आपके नियम (Memory Log)"):
-    for r in user_memory["rules"]:
-        st.write(f"• {r}")
+        recognition.onerror = function() {{
+            setTimeout(startListening, 2000);
+        }};
+
+        recognition.onend = function() {{
+            if (!synth.speaking) {{
+                setTimeout(startListening, 1000);
+            }}
+        }};
+
+        try {{
+            recognition.start();
+        }} catch(e) {{}}
+    }}
+
+    // पेज लोड होते ही ऑटो स्टार्ट
+    window.onload = function() {{
+        setTimeout(() => {{
+            speak("नमस्ते मनीष जी। अल्फा पल्स वॉइस असिस्टेंट तैयार है। आप जो पूछना चाहें, सीधे बोलें।");
+        }}, 800);
+    }};
+</script>
+""", height=220)
