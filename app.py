@@ -7,7 +7,6 @@ import json
 import os
 from google import genai
 
-# API Key
 GEMINI_KEY = "AQ.Ab8RN6KOv3QD2n7-ptoxMq5Dgbo753X3uc9eeVO1qzLJkg2Brg"
 
 st.set_page_config(
@@ -115,7 +114,7 @@ for i, name in enumerate(["NIFTY 50", "INDIA VIX", "CRUDE OIL", "GOLD", "BITCOIN
 
 st.write("---")
 
-# 4. शाम का सत्र व कल का प्री-मार्केट गेमप्लान
+# 4. शाम का सत्र व कल का गेमप्लान
 if not is_market_live:
     st.subheader("🌙 शाम का सत्र: MCX कमोडिटीज़ व कल का प्री-मार्केट गेमप्लान")
     c1, c2 = st.columns(2)
@@ -125,7 +124,7 @@ if not is_market_live:
             <h4 style="margin-top:0; color:#f0883e;">⚡ MCX कमोडिटीज़ स्थिति</h4>
             <p>• <b>Crude Oil:</b> ${crude_c:.2f} ({data.get('CRUDE OIL', {}).get('pct', 0):+.2f}%)</p>
             <p>• <b>Gold:</b> ${gold_c:,.2f} ({data.get('GOLD', {}).get('pct', 0):+.2f}%)</p>
-            <p>• <b>रणनीति:</b> यूएस सेशन में क्रूड मूवमेंट पर नजर रखें। 70 डॉलर के ऊपर रहने पर कल ओएमसी (OMCs) और पेंट स्टॉक्स पर दबाव रह सकता है।</p>
+            <p>• <b>रणनीति:</b> 70 डॉलर के ऊपर क्रूड रहने पर कल पेंट और ओएमसी स्टॉक्स पर नज़र रखें।</p>
         </div>
         """, unsafe_allow_html=True)
     with c2:
@@ -134,45 +133,37 @@ if not is_market_live:
             <h4 style="margin-top:0; color:#58a6ff;">🎯 कल सुबह के लिए निफ्टी गेमप्लान</h4>
             <p>• <b>क्लोजिंग लेवल्स:</b> Nifty {nifty_c:,.0f} | India VIX: {vix_c:.2f}</p>
             <p>• <b>ग्लोबल संकेत:</b> US Nasdaq {nasdaq_pct:+.2f}% पर ट्रेड कर रहा है।</p>
-            <p>• <b>कल का नियम:</b> रात में कोई निफ्टी ऑप्शन कॉल नहीं। सुबह 8:00 AM पर गिफ्ट निफ्टी देखकर फ्रेश सपोर्ट-रेजिस्टेंस तय होगा।</p>
+            <p>• <b>कल का नियम:</b> रात में कोई ओवरनाइट ऑप्शन कॉल नहीं। सुबह गिफ्ट निफ्टी देखकर फ्रेश सेटअप तय होगा।</p>
         </div>
         """, unsafe_allow_html=True)
-else:
-    st.subheader("🎯 लाइव इंट्राडे निफ्टी ऑप्शंस सेटअप")
-    strike = int(round(nifty_c / 50) * 50)
-    st.markdown(f"""
-    <div class="card" style="border-left: 4px solid #00c087;">
-        <h4>NIFTY {strike} CE / PE मॉनिटरिंग</h4>
-        <p>लाइव बाज़ार सेशन चालू है। अनुशासन के साथ 25-30 अंक SL रखकर ही ट्रेड लें।</p>
-    </div>
-    """, unsafe_allow_html=True)
 
 st.write("---")
 
-# 5. फुल-स्क्रीन वॉइस व चैट इंटरफ़ेस
-st.subheader("🎙️ AI वॉइस टर्मिनल से बातचीत")
+# 5. लाइव AI बातचीत टर्मिनल
+st.subheader("🎙️ Gemini AI वॉइस असिस्टेंट")
 
-user_query = st.chat_input("यहाँ पूछें या फोन के माइक से बोलें (उदा: 'क्रूड का क्या हाल है?' या 'नियम याद रखो: 1:3 रिस्क')")
+user_query = st.chat_input("बोलें या लिखें (उदा: 'क्रूड का क्या हाल है?' या 'याद रखो: रिस्क 1:2 रखना है')")
 
 if user_query:
-    with st.spinner("AI डेटा प्रोसेस कर रहा है..."):
+    with st.spinner("Gemini AI विश्लेषण कर रहा है..."):
         try:
             client = genai.Client(api_key=GEMINI_KEY)
             sys_context = f"""
             आप मनीष जी के पर्सनल सीनियर मार्केट AI रणनीतिकार हैं।
-            वर्तमान समय (IST): {time_str}
-            मार्केट स्थिति: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
-            लाइव भाव: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Gold=${gold_c:.2f}, Nasdaq={nasdaq_pct:.2f}%
-            मनीष जी की सेव की गई मेमोरी/रूल्स: {user_memory['rules']}
+            समय: {time_str}
+            मार्केट: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
+            डेटा: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Gold=${gold_c:.2f}, Nasdaq={nasdaq_pct:.2f}%
+            मनीष जी के सेव किए गए ट्रेडिंग नियम: {user_memory['rules']}
             
-            नियम:
-            1. सीधे, सटीक और प्राकृतिक हिंदी में बात करें।
-            2. अगर मनीष जी कोई नया नियम बताएं, तो कहें 'मनीष जी, मैंने यह नियम अपनी मेमोरी में जोड़ लिया है'।
-            3. रात के समय ऑप्शंस ट्रेडिंग न करने की सलाह पर अडिग रहें।
+            निर्देश:
+            1. सीधे, सटीक और प्राकृतिक दोस्ताना हिंदी में बात करें।
+            2. अगर मनीष जी कोई नियम जोड़ने या बदलने को कहें, तो पुष्टि करें कि नियम याद रख लिया गया है।
+            3. रात के समय ऑप्शंस ट्रेडिंग से रोकें और कमोडिटी/कल की तैयारी पर फोकस रखें।
             """
             
+            # अपडेटेड मॉडल: gemini-3.8-flash
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.8-flash",
                 contents=[sys_context, f"मनीष जी का सवाल: {user_query}"]
             )
             ai_reply = response.text
@@ -181,9 +172,9 @@ if user_query:
                 user_memory["rules"].append(user_query)
                 save_memory(user_memory)
             
-            st.markdown(f"*🤖 AI:* {ai_reply}")
+            st.markdown(f"*🤖 Gemini:* {ai_reply}")
             
-            # ऑटोमैटिक हिंदी ऑडियो
+            # नेचुरल वॉयस स्पीच आउटपुट
             cleaned_audio = ai_reply.replace('"', '').replace("'", "").replace('\n', ' ')
             st.components.v1.html(f"""
                 <script>
@@ -193,7 +184,7 @@ if user_query:
                     var hiVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi') || v.name.includes('India'));
                     if (hiVoice) msg.voice = hiVoice;
                     msg.lang = 'hi-IN';
-                    msg.rate = 0.95;
+                    msg.rate = 1.0;
                     synth.cancel();
                     synth.speak(msg);
                 </script>
