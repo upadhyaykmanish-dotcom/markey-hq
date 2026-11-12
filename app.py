@@ -3,20 +3,40 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
+import json
+import os
+from google import genai
 
 st.set_page_config(
-    page_title="AlphaPulse HQ Pro",
+    page_title="AlphaPulse HQ Pro AI",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# भारतीय समय (IST)
+# 1. भारतीय समय (IST)
 ist = pytz.timezone('Asia/Kolkata')
 now_ist = datetime.now(ist)
 current_hour = now_ist.hour
 current_minute = now_ist.minute
 time_str = now_ist.strftime("%d-%b-%Y | %I:%M:%S %p")
+
+# 2. सेल्फ-लर्निंग मेमोरी सिस्टम
+MEMORY_FILE = "user_memory.json"
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            pass
+    return {"rules": ["कैलकुलेटेड रिस्क मैनेजमेंट 1:2 रखें", "रात में नो ऑप्शन ट्रेड"], "notes": []}
+
+def save_memory(mem):
+    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(mem, f, ensure_ascii=False, indent=2)
+
+user_memory = load_memory()
 
 # डार्क थीम UI
 st.markdown("""
@@ -31,7 +51,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# डेटा फेचिंग
+# 3. मार्केट डेटा
 TICKERS = {
     "NIFTY 50": "^NSEI",
     "SENSEX": "^BSESN",
@@ -66,35 +86,17 @@ vix_c = data.get("INDIA VIX", {}).get("price", 15.0)
 crude_c = data.get("CRUDE OIL", {}).get("price", 0)
 nasdaq_pct = data.get("NASDAQ", {}).get("pct", 0)
 
-# मार्केट सेशन पहचान (9:15 AM से 3:30 PM के बीच लाइव)
 is_weekday = now_ist.weekday() < 5
 is_market_live = is_weekday and ((current_hour == 9 and current_minute >= 15) or (10 <= current_hour < 15) or (current_hour == 15 and current_minute <= 30))
 
-# समय के हिसाब से ग्रीटिंग और वॉइस स्क्रिप्ट
-if 4 <= current_hour < 12:
-    greeting = "सुप्रभात"
-elif 12 <= current_hour < 17:
-    greeting = "नमस्कार"
-else:
-    greeting = "शुभ संध्या"
-
-if is_market_live:
-    session_title = "🔴 LIVE NSE INTRADAY SESSION"
-    voice_script = f"{greeting} मनीष जी। बाज़ार लाइव चल रहा है। निफ्टी {nifty_c:,.0f} पर है और इंडिया विक्स {vix_c:.1f} पर है।"
-else:
-    session_title = "🌙 EVENING MCX & GLOBAL STRATEGY"
-    crude_trend = "तेजी में" if data.get("CRUDE OIL", {}).get("chg", 0) >= 0 else "गिरावट में"
-    voice_script = f"{greeting} मनीष जी। भारतीय बाज़ार बंद हो चुका है। इस समय कमोडिटी बाज़ार में क्रूड ऑयल {crude_c:.1f} डॉलर पर {crude_trend} है। नैस्डैक {nasdaq_pct:.1f} प्रतिशत है। कल सुबह के लिए गिफ्ट निफ्टी और ग्लोबल क्लोजिंग पर नजर रखें।"
-
 # हेडर
-st.title("⚡ AlphaPulse HQ Pro")
+st.title("⚡ AlphaPulse HQ Pro — AI Terminal")
 status_html = '<span class="status-badge badge-live">NSE लाइव</span>' if is_market_live else '<span class="status-badge badge-closed">NSE बंद (MCX/ग्लोबल एक्टिव)</span>'
 st.markdown(f"<b>वक्त (IST):</b> {time_str} &nbsp;|&nbsp; {status_html}", unsafe_allow_html=True)
 
 # टिकर ग्रिड
 cols = st.columns(6)
-ticker_list = ["NIFTY 50", "INDIA VIX", "CRUDE OIL", "GOLD", "BITCOIN", "NASDAQ"]
-for i, name in enumerate(ticker_list):
+for i, name in enumerate(["NIFTY 50", "INDIA VIX", "CRUDE OIL", "GOLD", "BITCOIN", "NASDAQ"]):
     val = data.get(name, {"price": 0, "chg": 0, "pct": 0})
     cls = "val-green" if val['chg'] >= 0 else "val-red"
     sign = "+" if val['chg'] >= 0 else ""
@@ -109,60 +111,65 @@ for i, name in enumerate(ticker_list):
 
 st.write("---")
 
-# वॉइस कार्ड (नेचुरल वॉइस)
-st.subheader("🎙️ AI ऑडियो ब्रीफिंग")
-c_v1, c_v2 = st.columns([1, 4])
-with c_v1:
-    if st.button("🔊 आज का ब्रीफ सुनें", use_container_width=True):
-        st.components.v1.html(f"""
-            <script>
-                var synth = window.speechSynthesis;
-                var voices = synth.getVoices();
-                var msg = new SpeechSynthesisUtterance("{voice_script}");
-                
-                var hiVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi') || v.name.includes('India'));
-                if (hiVoice) msg.voice = hiVoice;
-                
-                msg.lang = 'hi-IN';
-                msg.rate = 0.92;
-                msg.pitch = 1.0;
-                synth.cancel();
-                synth.speak(msg);
-            </script>
-        """, height=0)
-with c_v2:
-    st.info(voice_script)
+# 4. लाइव बातचीत व सेल्फ-लर्निंग AI सेक्शन
+st.subheader("💬 AI एनालिस्ट से बातचीत (बोलें या लिखें)")
 
-st.write("---")
+col_key, col_input = st.columns([1, 3])
+with col_key:
+    api_key = st.text_input("🔑 Gemini API Key:", type="password", value=st.session_state.get("gemini_key", ""))
+    if api_key:
+        st.session_state["gemini_key"] = api_key
+with col_input:
+    user_query = st.chat_input("यहाँ पूछें (उदा: 'कल निफ्टी का क्या प्लान है?' या 'मेरी याददाश्त में जोड़ो: रिस्क 1:3 रखो')")
 
-# डायनामिक सेशन कंटेंट
-if not is_market_live:
-    st.subheader("🌙 शाम का सत्र: MCX कमोडिटीज़ व कल का प्री-मार्केट गेमप्लान")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"""
-        <div class="card" style="border-left: 4px solid #f0883e;">
-            <h4 style="margin-top:0; color:#f0883e;">⚡ MCX कमोडिटीज़ स्थिति</h4>
-            <p>• <b>Crude Oil:</b> ${crude_c:.2f} ({data.get('CRUDE OIL', {}).get('pct', 0):.2f}%)</p>
-            <p>• <b>Gold:</b> ${data.get('GOLD', {}).get('price', 0):,.2f}</p>
-            <p>• <b>रणनीति:</b> यूएस सेशन में क्रूड मूवमेंट पर नजर रखें। 70 डॉलर के ऊपर रहने पर कल ओएमसी (OMCs) और पेंट स्टॉक्स पर दबाव रह सकता है।</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""
-        <div class="card" style="border-left: 4px solid #58a6ff;">
-            <h4 style="margin-top:0; color:#58a6ff;">🎯 कल सुबह के लिए निफ्टी गेमप्लान</h4>
-            <p>• <b>क्लोजिंग लेवल्स:</b> Nifty {nifty_c:,.0f} | India VIX: {vix_c:.2f}</p>
-            <p>• <b>ग्लोबल संकेत:</b> US Nasdaq {nasdaq_pct:+.2f}% पर ट्रेड कर रहा है।</p>
-            <p>• <b>कल का नियम:</b> रात में कोई निफ्टी ऑप्शन कॉल नहीं। सुबह 8:00 AM पर गिफ्ट निफ्टी देखकर फ्रेश सपोर्ट-रेजिस्टेंस तय होगा।</p>
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    st.subheader("🎯 लाइव इंट्राडे निफ्टी ऑप्शंस सेटअप")
-    strike = int(round(nifty_c / 50) * 50)
-    st.markdown(f"""
-    <div class="card" style="border-left: 4px solid #00c087;">
-        <h4>NIFTY {strike} CE / PE मॉनिटरिंग</h4>
-        <p>लाइव बाज़ार सेशन चालू है। अनुशासन के साथ 25-30 अंक SL रखकर ही ट्रेड लें।</p>
-    </div>
-    """, unsafe_allow_html=True)
+# अगर यूज़र ने सवाल पूछा
+if user_query:
+    if not api_key:
+        st.warning("कृपया बाएँ हाथ वाले बॉक्स में अपनी Gemini API Key डालें।")
+    else:
+        with st.spinner("AI डेटा और आपकी मेमोरी का विश्लेषण कर रहा है..."):
+            try:
+                client = genai.Client(api_key=api_key)
+                
+                sys_context = f"""
+                आप मनीष जी के पर्सनल प्रोफेशनल मार्केट AI असिस्टेंट हैं।
+                वर्तमान समय (IST): {time_str}
+                बाज़ार स्थिति: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
+                लाइव डेटा: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Nasdaq={nasdaq_pct:.2f}%
+                मनीष जी के सेव किए गए नियम/मेमोरी: {user_memory['rules']}
+                
+                निर्देश:
+                1. सीधे, सटीक और बिना किसी फॉर्मेलिटी के हिंदी में जवाब दें।
+                2. अगर मनीष जी कोई नियम बदलने या याद रखने को कहें, तो पुष्टि करें कि आपने याद रख लिया।
+                3. रात के समय ऑप्शंस ट्रेडिंग से रोकें और ग्लोबल/कमोडिटी पर केंद्रित रहें।
+                """
+                
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=[sys_context, f"मनीष जी का सवाल: {user_query}"]
+                )
+                ai_reply = response.text
+                
+                if "याद" in user_query or "नियम" in user_query or "सेव" in user_query:
+                    user_memory["rules"].append(user_query)
+                    save_memory(user_memory)
+                
+                st.markdown(f"*🤖 AI:* {ai_reply}")
+                
+                cleaned_audio = ai_reply.replace('"', '').replace('\n', ' ')
+                st.components.v1.html(f"""
+                    <script>
+                        var synth = window.speechSynthesis;
+                        var msg = new SpeechSynthesisUtterance("{cleaned_audio[:300]}");
+                        msg.lang = 'hi-IN';
+                        msg.rate = 0.95;
+                        synth.cancel();
+                        synth.speak(msg);
+                    </script>
+                """, height=0)
+            except Exception as e:
+                st.error(f"एरर आया: {e}")
+
+with st.expander("🧠 AI द्वारा सीखी गई आपकी आदतें व नियम (Memory Log)"):
+    for r in user_memory["rules"]:
+        st.write(f"• {r}")
