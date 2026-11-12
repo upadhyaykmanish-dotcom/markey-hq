@@ -1,4 +1,4 @@
-import streamlit as st
+mport streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
@@ -7,7 +7,7 @@ import json
 import os
 from google import genai
 
-# API Key सीधे इंटीग्रेट कर दी गई है
+# API Key
 GEMINI_KEY = "AQ.Ab8RN6KOv3QD2n7-ptoxMq5Dgbo753X3uc9eeVO1qzLJkg2Brg"
 
 st.set_page_config(
@@ -149,17 +149,58 @@ else:
 
 st.write("---")
 
-# 5. लाइव बातचीत व सेल्फ-लर्निंग AI सेक्शन
-st.subheader("💬 AI एनालिस्ट से बातचीत (सीधे पूछें या निर्देश दें)")
+# 5. फुल-स्क्रीन वॉइस व चैट इंटरफ़ेस
+st.subheader("🎙️ AI वॉइस टर्मिनल से बातचीत")
 
-user_query = st.chat_input("यहाँ पूछें (उदा: 'क्रूड ऑयल का क्या रुख है?' या 'याद रखो: रिस्क-रिवॉर्ड 1:3 रखना है')")
+user_query = st.chat_input("यहाँ पूछें या फोन के माइक से बोलें (उदा: 'क्रूड का क्या हाल है?' या 'नियम याद रखो: 1:3 रिस्क')")
 
 if user_query:
-    with st.spinner("AI विश्लेषण कर रहा है..."):
+    with st.spinner("AI डेटा प्रोसेस कर रहा है..."):
         try:
             client = genai.Client(api_key=GEMINI_KEY)
             sys_context = f"""
-            आप मनीष जी के पर्सनल प्रोफेशनल मार्केट AI असिस्टेंट हैं।
+            आप मनीष जी के पर्सनल सीनियर मार्केट AI रणनीतिकार हैं।
             वर्तमान समय (IST): {time_str}
-            बाज़ार स्थिति: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
-            लाइव डेटा: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Gold=${
+            मार्केट स्थिति: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
+            लाइव भाव: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Gold=${gold_c:.2f}, Nasdaq={nasdaq_pct:.2f}%
+            मनीष जी की सेव की गई मेमोरी/रूल्स: {user_memory['rules']}
+            
+            नियम:
+            1. सीधे, सटीक और प्राकृतिक हिंदी में बात करें।
+            2. अगर मनीष जी कोई नया नियम बताएं, तो कहें 'मनीष जी, मैंने यह नियम अपनी मेमोरी में जोड़ लिया है'।
+            3. रात के समय ऑप्शंस ट्रेडिंग न करने की सलाह पर अडिग रहें।
+            """
+            
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[sys_context, f"मनीष जी का सवाल: {user_query}"]
+            )
+            ai_reply = response.text
+            
+            if any(k in user_query for k in ["याद", "नियम", "सेव", "जोड़ो", "नोट"]):
+                user_memory["rules"].append(user_query)
+                save_memory(user_memory)
+            
+            st.markdown(f"*🤖 AI:* {ai_reply}")
+            
+            # ऑटोमैटिक हिंदी ऑडियो
+            cleaned_audio = ai_reply.replace('"', '').replace("'", "").replace('\n', ' ')
+            st.components.v1.html(f"""
+                <script>
+                    var synth = window.speechSynthesis;
+                    var voices = synth.getVoices();
+                    var msg = new SpeechSynthesisUtterance("{cleaned_audio[:350]}");
+                    var hiVoice = voices.find(v => v.lang.includes('hi') || v.name.includes('Hindi') || v.name.includes('India'));
+                    if (hiVoice) msg.voice = hiVoice;
+                    msg.lang = 'hi-IN';
+                    msg.rate = 0.95;
+                    synth.cancel();
+                    synth.speak(msg);
+                </script>
+            """, height=0)
+        except Exception as e:
+            st.error(f"एरर आया: {e}")
+
+with st.expander("🧠 AI द्वारा याद रखे गए आपके नियम (Memory Log)"):
+    for r in user_memory["rules"]:
+        st.write(f"• {r}")
