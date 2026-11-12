@@ -7,6 +7,9 @@ import json
 import os
 from google import genai
 
+# API Key सीधे इंटीग्रेट कर दी गई है
+GEMINI_KEY = "AQ.Ab8RN6KOv3QD2n7-ptoxMq5Dgbo753X3uc9eeVO1qzLJkg2Brg"
+
 st.set_page_config(
     page_title="AlphaPulse HQ Pro AI",
     page_icon="⚡",
@@ -112,7 +115,7 @@ for i, name in enumerate(["NIFTY 50", "INDIA VIX", "CRUDE OIL", "GOLD", "BITCOIN
 
 st.write("---")
 
-# 4. शाम का सत्र / लाइव सत्र कार्ड्स (जो पहले गायब हो गया था)
+# 4. शाम का सत्र व कल का प्री-मार्केट गेमप्लान
 if not is_market_live:
     st.subheader("🌙 शाम का सत्र: MCX कमोडिटीज़ व कल का प्री-मार्केट गेमप्लान")
     c1, c2 = st.columns(2)
@@ -147,62 +150,16 @@ else:
 st.write("---")
 
 # 5. लाइव बातचीत व सेल्फ-लर्निंग AI सेक्शन
-st.subheader("💬 AI एनालिस्ट से बातचीत (बोलें या लिखें)")
+st.subheader("💬 AI एनालिस्ट से बातचीत (सीधे पूछें या निर्देश दें)")
 
-col_key, col_input = st.columns([1, 3])
-with col_key:
-    api_key = st.text_input("🔑 Gemini API Key:", type="password", value=st.session_state.get("gemini_key", ""))
-    if api_key:
-        st.session_state["gemini_key"] = api_key
-with col_input:
-    user_query = st.chat_input("यहाँ पूछें (उदा: 'कल निफ्टी का क्या प्लान है?' या 'मेरी याददाश्त में जोड़ो: रिस्क 1:3 रखो')")
+user_query = st.chat_input("यहाँ पूछें (उदा: 'क्रूड ऑयल का क्या रुख है?' या 'याद रखो: रिस्क-रिवॉर्ड 1:3 रखना है')")
 
 if user_query:
-    if not api_key:
-        st.warning("कृपया बाएँ हाथ वाले बॉक्स में अपनी Gemini API Key डालें।")
-    else:
-        with st.spinner("AI डेटा और आपकी मेमोरी का विश्लेषण कर रहा है..."):
-            try:
-                client = genai.Client(api_key=api_key)
-                sys_context = f"""
-                आप मनीष जी के पर्सनल प्रोफेशनल मार्केट AI असिस्टेंट हैं।
-                वर्तमान समय (IST): {time_str}
-                बाज़ार स्थिति: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
-                लाइव डेटा: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Gold=${gold_c:.2f}, Nasdaq={nasdaq_pct:.2f}%
-                मनीष जी के सेव किए गए नियम/मेमोरी: {user_memory['rules']}
-                
-                निर्देश:
-                1. सीधे, सटीक और बिना किसी औपचारिकता के हिंदी में जवाब दें।
-                2. अगर मनीष जी कोई नियम बदलने या याद रखने को कहें, तो पुष्टि करें कि आपने याद रख लिया।
-                3. रात के समय ऑप्शंस ट्रेडिंग से रोकें और ग्लोबल/कमोडिटी पर केंद्रित रहें।
-                """
-                
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=[sys_context, f"मनीष जी का सवाल: {user_query}"]
-                )
-                ai_reply = response.text
-                
-                if "याद" in user_query or "नियम" in user_query or "सेव" in user_query:
-                    user_memory["rules"].append(user_query)
-                    save_memory(user_memory)
-                
-                st.markdown(f"*🤖 AI:* {ai_reply}")
-                
-                cleaned_audio = ai_reply.replace('"', '').replace('\n', ' ')
-                st.components.v1.html(f"""
-                    <script>
-                        var synth = window.speechSynthesis;
-                        var msg = new SpeechSynthesisUtterance("{cleaned_audio[:300]}");
-                        msg.lang = 'hi-IN';
-                        msg.rate = 0.95;
-                        synth.cancel();
-                        synth.speak(msg);
-                    </script>
-                """, height=0)
-            except Exception as e:
-                st.error(f"एरर आया: {e}")
-
-with st.expander("🧠 AI द्वारा सीखी गई आपकी आदतें व नियम (Memory Log)"):
-    for r in user_memory["rules"]:
-        st.write(f"• {r}")
+    with st.spinner("AI विश्लेषण कर रहा है..."):
+        try:
+            client = genai.Client(api_key=GEMINI_KEY)
+            sys_context = f"""
+            आप मनीष जी के पर्सनल प्रोफेशनल मार्केट AI असिस्टेंट हैं।
+            वर्तमान समय (IST): {time_str}
+            बाज़ार स्थिति: {'NSE लाइव' if is_market_live else 'NSE बंद, MCX और यूएस लाइव'}
+            लाइव डेटा: Nifty={nifty_c:.0f}, India VIX={vix_c:.2f}, Crude Oil=${crude_c:.2f}, Gold=${
